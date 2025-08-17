@@ -7,12 +7,40 @@ from app.agent.toolcall import ToolCallAgent
 from app.config import config
 from app.logger import logger
 from app.prompt.manus import NEXT_STEP_PROMPT, SYSTEM_PROMPT
-from app.tool import Terminate, ToolCollection
-from app.tool.ask_human import AskHuman
-from app.tool.browser_use_tool import BrowserUseTool
+from app.tool import ToolCollection
 from app.tool.mcp import MCPClients, MCPClientTool
 from app.tool.python_execute import PythonExecute
-from app.tool.str_replace_editor import StrReplaceEditor
+
+# Importiamo la nostra suite di strumenti completa e aggiornata
+from app.tool.file_read import FileReadTool
+from app.tool.file_write import FileWriteTool
+from app.tool.file_str_replace import FileStrReplaceTool
+from app.tool.file_find_in_content import FileFindInContentTool
+from app.tool.file_find_by_name import FileFindByNameTool
+from app.tool.shell_exec import ShellExecTool
+from app.tool.shell_view import ShellViewTool
+from app.tool.shell_kill_process import ShellKillProcessTool
+from app.tool.browser_navigate import BrowserNavigateTool
+from app.tool.browser_view import BrowserViewTool
+from app.tool.browser_click import BrowserClickTool
+from app.tool.browser_input import BrowserInputTool
+from app.tool.browser_scroll_up import BrowserScrollUpTool
+from app.tool.browser_scroll_down import BrowserScrollDownTool
+from app.tool.browser_press_key import BrowserPressKeyTool
+from app.tool.browser_select_option import BrowserSelectOptionTool
+from app.tool.browser_restart import BrowserRestartTool
+from app.tool.browser_move_mouse import BrowserMoveMouseTool
+from app.tool.info_search_web import InfoSearchWebTool
+from app.tool.deploy_expose_port import DeployExposePortTool
+from app.tool.idle import IdleTool
+from app.tool.shell_wait import ShellWaitTool
+from app.tool.shell_write_to_process import ShellWriteToProcessTool
+from app.tool.browser_console_exec import BrowserConsoleExecTool
+from app.tool.browser_console_view import BrowserConsoleViewTool
+from app.tool.deploy_apply_deployment import DeployApplyDeploymentTool
+from app.tool.make_manus_page import MakeManusPageTool
+from app.tool.message_notify_user import MessageNotifyUserTool
+from app.tool.message_ask_user import MessageAskUserTool
 
 
 class Manus(ToolCallAgent):
@@ -27,27 +55,48 @@ class Manus(ToolCallAgent):
     max_observe: int = 10000
     max_steps: int = 20
 
-    # MCP clients for remote tool access
     mcp_clients: MCPClients = Field(default_factory=MCPClients)
 
-    # Add general-purpose tools to the tool collection
+    # La lista completa di tutti gli strumenti che abbiamo implementato
     available_tools: ToolCollection = Field(
         default_factory=lambda: ToolCollection(
             PythonExecute(),
-            BrowserUseTool(),
-            StrReplaceEditor(),
-            AskHuman(),
-            Terminate(),
+            FileReadTool(),
+            FileWriteTool(),
+            FileStrReplaceTool(),
+            FileFindInContentTool(),
+            FileFindByNameTool(),
+            ShellExecTool(),
+            ShellViewTool(),
+            ShellKillProcessTool(),
+            InfoSearchWebTool(),
+            BrowserNavigateTool(),
+            BrowserViewTool(),
+            BrowserClickTool(),
+            BrowserInputTool(),
+            BrowserScrollUpTool(),
+            BrowserScrollDownTool(),
+            BrowserPressKeyTool(),
+            BrowserSelectOptionTool(),
+            BrowserRestartTool(),
+            BrowserMoveMouseTool(),
+            DeployExposePortTool(),
+            IdleTool(),
+            ShellWaitTool(),
+            ShellWriteToProcessTool(),
+            BrowserConsoleExecTool(),
+            BrowserConsoleViewTool(),
+            DeployApplyDeploymentTool(),
+            MakeManusPageTool(),
+            MessageNotifyUserTool(),
+            MessageAskUserTool(),
         )
     )
 
-    special_tool_names: list[str] = Field(default_factory=lambda: [Terminate().name])
+    special_tool_names: list[str] = Field(default_factory=lambda: [IdleTool().name])
     browser_context_helper: Optional[BrowserContextHelper] = None
 
-    # Track connected MCP servers
-    connected_servers: Dict[str, str] = Field(
-        default_factory=dict
-    )  # server_id -> url/command
+    connected_servers: Dict[str, str] = Field(default_factory=dict)
     _initialized: bool = False
 
     @model_validator(mode="after")
@@ -66,6 +115,8 @@ class Manus(ToolCallAgent):
 
     async def initialize_mcp_servers(self) -> None:
         """Initialize connections to configured MCP servers."""
+        if not config.mcp_config or not config.mcp_config.servers:
+            return
         for server_id, server_config in config.mcp_config.servers.items():
             try:
                 if server_config.type == "sse":
@@ -105,7 +156,6 @@ class Manus(ToolCallAgent):
             await self.mcp_clients.connect_sse(server_url, server_id)
             self.connected_servers[server_id or server_url] = server_url
 
-        # Update available tools with only the new tools from this server
         new_tools = [
             tool for tool in self.mcp_clients.tools if tool.server_id == server_id
         ]
@@ -119,7 +169,6 @@ class Manus(ToolCallAgent):
         else:
             self.connected_servers.clear()
 
-        # Rebuild available tools without the disconnected server's tools
         base_tools = [
             tool
             for tool in self.available_tools.tools
@@ -132,7 +181,6 @@ class Manus(ToolCallAgent):
         """Clean up Manus agent resources."""
         if self.browser_context_helper:
             await self.browser_context_helper.cleanup_browser()
-        # Disconnect from all MCP servers only if we were initialized
         if self._initialized:
             await self.disconnect_mcp_server()
             self._initialized = False
@@ -145,8 +193,9 @@ class Manus(ToolCallAgent):
 
         original_prompt = self.next_step_prompt
         recent_messages = self.memory.messages[-3:] if self.memory.messages else []
+        
         browser_in_use = any(
-            tc.function.name == BrowserUseTool().name
+            tc.function.name.startswith("browser_")
             for msg in recent_messages
             if msg.tool_calls
             for tc in msg.tool_calls
@@ -159,7 +208,5 @@ class Manus(ToolCallAgent):
 
         result = await super().think()
 
-        # Restore original prompt
         self.next_step_prompt = original_prompt
-
         return result
