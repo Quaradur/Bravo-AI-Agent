@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import List, Optional, Any
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -8,6 +8,8 @@ from app.llm import LLM
 from app.logger import logger
 from app.sandbox.client import SANDBOX_CLIENT
 from app.schema import ROLE_TYPE, AgentState, Memory, Message
+# Importiamo lo Scratchpad per usarlo come tipo
+from app.utils.scratchpad import Scratchpad
 
 
 class BaseAgent(BaseModel, ABC):
@@ -41,6 +43,11 @@ class BaseAgent(BaseModel, ABC):
     current_step: int = Field(default=0, description="Current step in execution")
 
     duplicate_threshold: int = 2
+    
+    # --- INIZIO MODIFICA ---
+    # Aggiungiamo un riferimento allo scratchpad
+    scratchpad: Optional[Scratchpad] = None
+    # --- FINE MODIFICA ---
 
     class Config:
         arbitrary_types_allowed = True
@@ -57,17 +64,7 @@ class BaseAgent(BaseModel, ABC):
 
     @asynccontextmanager
     async def state_context(self, new_state: AgentState):
-        """Context manager for safe agent state transitions.
-
-        Args:
-            new_state: The state to transition to during the context.
-
-        Yields:
-            None: Allows execution within the new state.
-
-        Raises:
-            ValueError: If the new_state is invalid.
-        """
+        """Context manager for safe agent state transitions."""
         if not isinstance(new_state, AgentState):
             raise ValueError(f"Invalid state: {new_state}")
 
@@ -76,10 +73,10 @@ class BaseAgent(BaseModel, ABC):
         try:
             yield
         except Exception as e:
-            self.state = AgentState.ERROR  # Transition to ERROR on failure
+            self.state = AgentState.ERROR
             raise e
         finally:
-            self.state = previous_state  # Revert to previous state
+            self.state = previous_state
 
     def update_memory(
         self,
@@ -88,17 +85,7 @@ class BaseAgent(BaseModel, ABC):
         base64_image: Optional[str] = None,
         **kwargs,
     ) -> None:
-        """Add a message to the agent's memory.
-
-        Args:
-            role: The role of the message sender (user, system, assistant, tool).
-            content: The message content.
-            base64_image: Optional base64 encoded image.
-            **kwargs: Additional arguments (e.g., tool_call_id for tool messages).
-
-        Raises:
-            ValueError: If the role is unsupported.
-        """
+        """Add a message to the agent's memory."""
         message_map = {
             "user": Message.user_message,
             "system": Message.system_message,
@@ -109,24 +96,18 @@ class BaseAgent(BaseModel, ABC):
         if role not in message_map:
             raise ValueError(f"Unsupported message role: {role}")
 
-        # Create message with appropriate parameters based on role
         kwargs = {"base64_image": base64_image, **(kwargs if role == "tool" else {})}
         self.memory.add_message(message_map[role](content, **kwargs))
 
-    async def run(self, request: Optional[str] = None) -> str:
-        """Execute the agent's main loop asynchronously.
-
-        Args:
-            request: Optional initial user request to process.
-
-        Returns:
-            A string summarizing the execution results.
-
-        Raises:
-            RuntimeError: If the agent is not in IDLE state at start.
-        """
-        if self.state != AgentState.IDLE:
+    # --- INIZIO MODIFICA: Aggiorniamo la firma del metodo run ---
+    async def run(self, request: Optional[str] = None, scratchpad: Optional[Scratchpad] = None) -> str:
+        """Execute the agent's main loop asynchronously."""
+        if self.state not in [AgentState.IDLE, AgentState.AWAITING_USER_INPUT]:
             raise RuntimeError(f"Cannot run agent from state: {self.state}")
+
+        # Assegna lo scratchpad all'agente per questa esecuzione
+        self.scratchpad = scratchpad
+    # --- FINE MODIFICA ---
 
         if request:
             self.update_memory("user", request)
@@ -140,25 +121,30 @@ class BaseAgent(BaseModel, ABC):
                 logger.info(f"Executing step {self.current_step}/{self.max_steps}")
                 step_result = await self.step()
 
-                # Check for stuck state
+                if hasattr(step_result, "system") and step_result.system == "AWAITING_USER_INPUT":
+                    self.state = AgentState.AWAITING_USER_INPUT
+                    logger.info("Agent is now awaiting user input.")
+                    results.append(step_result.output)
+                    break
+
                 if self.is_stuck():
                     self.handle_stuck_state()
 
-                results.append(f"Step {self.current_step}: {step_result}")
+                results.append(f"Step {self.current_step}: {str(step_result)}")
 
             if self.current_step >= self.max_steps:
                 self.current_step = 0
                 self.state = AgentState.IDLE
                 results.append(f"Terminated: Reached max steps ({self.max_steps})")
-        await SANDBOX_CLIENT.cleanup()
+        
+        if self.state != AgentState.AWAITING_USER_INPUT:
+            await SANDBOX_CLIENT.cleanup()
+            
         return "\n".join(results) if results else "No steps executed"
 
     @abstractmethod
-    async def step(self) -> str:
-        """Execute a single step in the agent's workflow.
-
-        Must be implemented by subclasses to define specific behavior.
-        """
+    async def step(self) -> Any:
+        """Execute a single step in the agent's workflow."""
 
     def handle_stuck_state(self):
         """Handle stuck state by adding a prompt to change strategy"""
@@ -176,7 +162,6 @@ class BaseAgent(BaseModel, ABC):
         if not last_message.content:
             return False
 
-        # Count identical content occurrences
         duplicate_count = sum(
             1
             for msg in reversed(self.memory.messages[:-1])

@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from app.tool.base import BaseTool, ToolResult
 from app.tool.shell_manager import shell_manager
 from app.config import config
@@ -26,6 +27,13 @@ class ShellExecTool(BaseTool):
         if not exec_dir:
             exec_dir = str(config.workspace_root)
         
+        # --- INIZIO MODIFICA: Logica di Compatibilità Cross-Platform ---
+        # Sostituisce automaticamente 'python3' con 'python' se il sistema operativo è Windows.
+        # Questo rende l'agente più robusto e gli impedisce di fallire su diversi ambienti.
+        if sys.platform == "win32" and command.strip().startswith("python3"):
+            command = "python" + command.strip()[len("python3"):]
+        # --- FINE MODIFICA ---
+
         try:
             process = await asyncio.create_subprocess_shell(
                 command,

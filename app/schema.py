@@ -36,6 +36,9 @@ class AgentState(str, Enum):
     RUNNING = "RUNNING"
     FINISHED = "FINISHED"
     ERROR = "ERROR"
+    # --- INIZIO MODIFICA ---
+    AWAITING_USER_INPUT = "AWAITING_USER_INPUT"
+    # --- FINE MODIFICA ---
 
 
 class Function(BaseModel):
@@ -62,7 +65,7 @@ class Message(BaseModel):
     base64_image: Optional[str] = Field(default=None)
 
     def __add__(self, other) -> List["Message"]:
-        """支持 Message + list 或 Message + Message 的操作"""
+        """Support Message + list or Message + Message operations"""
         if isinstance(other, list):
             return [self] + other
         elif isinstance(other, Message):
@@ -73,7 +76,7 @@ class Message(BaseModel):
             )
 
     def __radd__(self, other) -> List["Message"]:
-        """支持 list + Message 的操作"""
+        """Support list + Message operations"""
         if isinstance(other, list):
             return other + [self]
         else:

@@ -1,46 +1,23 @@
+import os
 from typing import Dict, List, Optional
 
 from pydantic import Field, model_validator
 
 from app.agent.browser import BrowserContextHelper
 from app.agent.toolcall import ToolCallAgent
-from app.config import config
+from app.config import config, PROJECT_ROOT
 from app.logger import logger
 from app.prompt.manus import NEXT_STEP_PROMPT, SYSTEM_PROMPT
 from app.tool import ToolCollection
 from app.tool.mcp import MCPClients, MCPClientTool
-from app.tool.python_execute import PythonExecute
-
-# Importiamo la nostra suite di strumenti completa e aggiornata
-from app.tool.file_read import FileReadTool
-from app.tool.file_write import FileWriteTool
-from app.tool.file_str_replace import FileStrReplaceTool
-from app.tool.file_find_in_content import FileFindInContentTool
-from app.tool.file_find_by_name import FileFindByNameTool
-from app.tool.shell_exec import ShellExecTool
-from app.tool.shell_view import ShellViewTool
-from app.tool.shell_kill_process import ShellKillProcessTool
-from app.tool.browser_navigate import BrowserNavigateTool
-from app.tool.browser_view import BrowserViewTool
-from app.tool.browser_click import BrowserClickTool
-from app.tool.browser_input import BrowserInputTool
-from app.tool.browser_scroll_up import BrowserScrollUpTool
-from app.tool.browser_scroll_down import BrowserScrollDownTool
-from app.tool.browser_press_key import BrowserPressKeyTool
-from app.tool.browser_select_option import BrowserSelectOptionTool
-from app.tool.browser_restart import BrowserRestartTool
-from app.tool.browser_move_mouse import BrowserMoveMouseTool
-from app.tool.info_search_web import InfoSearchWebTool
-from app.tool.deploy_expose_port import DeployExposePortTool
 from app.tool.idle import IdleTool
-from app.tool.shell_wait import ShellWaitTool
-from app.tool.shell_write_to_process import ShellWriteToProcessTool
-from app.tool.browser_console_exec import BrowserConsoleExecTool
-from app.tool.browser_console_view import BrowserConsoleViewTool
-from app.tool.deploy_apply_deployment import DeployApplyDeploymentTool
-from app.tool.make_manus_page import MakeManusPageTool
-from app.tool.message_notify_user import MessageNotifyUserTool
-from app.tool.message_ask_user import MessageAskUserTool
+
+# --- INIZIO MODIFICA: Caricamento dinamico degli strumenti ---
+from app.utils.tool_loader import load_tools_from_directory
+
+# Definiamo la directory da cui caricare gli strumenti
+TOOL_DIR = PROJECT_ROOT / "app" / "tool"
+# --- FINE MODIFICA ---
 
 
 class Manus(ToolCallAgent):
@@ -57,41 +34,15 @@ class Manus(ToolCallAgent):
 
     mcp_clients: MCPClients = Field(default_factory=MCPClients)
 
-    # La lista completa di tutti gli strumenti che abbiamo implementato
+    # --- INIZIO MODIFICA: Utilizzo del caricatore dinamico ---
+    # La lista di strumenti non è più statica. Viene costruita dinamicamente
+    # all'avvio dell'agente chiamando la nostra nuova funzione di utilità.
     available_tools: ToolCollection = Field(
         default_factory=lambda: ToolCollection(
-            PythonExecute(),
-            FileReadTool(),
-            FileWriteTool(),
-            FileStrReplaceTool(),
-            FileFindInContentTool(),
-            FileFindByNameTool(),
-            ShellExecTool(),
-            ShellViewTool(),
-            ShellKillProcessTool(),
-            InfoSearchWebTool(),
-            BrowserNavigateTool(),
-            BrowserViewTool(),
-            BrowserClickTool(),
-            BrowserInputTool(),
-            BrowserScrollUpTool(),
-            BrowserScrollDownTool(),
-            BrowserPressKeyTool(),
-            BrowserSelectOptionTool(),
-            BrowserRestartTool(),
-            BrowserMoveMouseTool(),
-            DeployExposePortTool(),
-            IdleTool(),
-            ShellWaitTool(),
-            ShellWriteToProcessTool(),
-            BrowserConsoleExecTool(),
-            BrowserConsoleViewTool(),
-            DeployApplyDeploymentTool(),
-            MakeManusPageTool(),
-            MessageNotifyUserTool(),
-            MessageAskUserTool(),
+            *load_tools_from_directory(TOOL_DIR)
         )
     )
+    # --- FINE MODIFICA ---
 
     special_tool_names: list[str] = Field(default_factory=lambda: [IdleTool().name])
     browser_context_helper: Optional[BrowserContextHelper] = None

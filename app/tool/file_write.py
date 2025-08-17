@@ -1,5 +1,6 @@
 import os
 from app.tool.base import BaseTool, ToolResult
+from app.config import config
 
 class FileWriteTool(BaseTool):
     name: str = "file_write"
@@ -9,7 +10,7 @@ class FileWriteTool(BaseTool):
         "properties": {
             "file": {
                 "type": "string",
-                "description": "Absolute path of the file to write to"
+                "description": "Absolute or relative path of the file to write to. Relative paths are resolved from the workspace root."
             },
             "content": {
                 "type": "string",
@@ -25,21 +26,26 @@ class FileWriteTool(BaseTool):
     }
 
     async def execute(self, file: str, content: str, append: bool = False) -> ToolResult:
+        # --- START MODIFICATION ---
+        # Converte i percorsi relativi in percorsi assoluti basati sulla workspace
         if not os.path.isabs(file):
-            return ToolResult(error=f"Path '{file}' is not an absolute path.")
+            file_path = os.path.join(config.workspace_root, file)
+        else:
+            file_path = file
+        # --- END MODIFICATION ---
 
         try:
             # Assicura che la directory esista
-            directory = os.path.dirname(file)
+            directory = os.path.dirname(file_path)
             if not os.path.exists(directory):
                 os.makedirs(directory)
 
             mode = 'a' if append else 'w'
-            with open(file, mode, encoding='utf-8') as f:
+            with open(file_path, mode, encoding='utf-8') as f:
                 f.write(content)
             
             action = "appended to" if append else "written to"
-            return ToolResult(output=f"Successfully {action} file: {file}")
+            return ToolResult(output=f"Successfully {action} file: {file_path}")
 
         except Exception as e:
-            return ToolResult(error=f"Failed to write to file '{file}': {str(e)}")
+            return ToolResult(error=f"Failed to write to file '{file_path}': {str(e)}")

@@ -9,14 +9,16 @@ from app.agent.data_analysis import DataAnalysis
 from app.agent.code_writer_agent import CodeWriterAgent
 
 from app.config import config
-from app.flow.flow_factory import FlowFactory, FlowType
+# --- INIZIO MODIFICA: Importiamo il nuovo OrchestratorFlow ---
+from app.flow.orchestrator import OrchestratorFlow
+# --- FINE MODIFICA ---
 from app.logger import logger
 
 
 async def run_flow():
     """
     Esegue il flusso di orchestrazione principale, assemblando il team di agenti
-    e passando il controllo all'agente Manager (Manus).
+    e passando il controllo all'agente Manager (Manus) tramite l'OrchestratorFlow.
     """
     
     # Definiamo il team completo di agenti specialisti.
@@ -36,12 +38,14 @@ async def run_flow():
             logger.warning("Empty prompt provided.")
             return
 
-        # Il FlowFactory crea il flusso di pianificazione, passando l'intero team di agenti.
-        # 'manus' è impostato come agente primario di default.
-        flow = FlowFactory.create_flow(
-            flow_type=FlowType.PLANNING,
+        # --- INIZIO MODIFICA: Utilizziamo il nuovo OrchestratorFlow ---
+        # Il Flow ora è un orchestratore che gestisce la collaborazione.
+        # Manus è l'agente primario che guiderà il flusso.
+        flow = OrchestratorFlow(
             agents=agents,
+            primary_agent_key="manus"
         )
+        # --- FINE MODIFICA ---
         
         logger.warning("Processing your request with the multi-agent team...")
 

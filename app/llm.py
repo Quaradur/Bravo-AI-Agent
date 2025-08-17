@@ -408,13 +408,12 @@ class LLM:
                 "messages": messages,
             }
 
-            if self.model in REASONING_MODELS:
-                params["max_completion_tokens"] = self.max_tokens
-            else:
-                params["max_tokens"] = self.max_tokens
-                params["temperature"] = (
-                    temperature if temperature is not None else self.temperature
-                )
+            # --- START CORRECTION ---
+            params["max_completion_tokens"] = self.max_tokens
+            params["temperature"] = (
+                temperature if temperature is not None else self.temperature
+            )
+            # --- END CORRECTION ---
 
             if not stream:
                 # Non-streaming request
@@ -579,14 +578,12 @@ class LLM:
                 "stream": stream,
             }
 
-            # Add model-specific parameters
-            if self.model in REASONING_MODELS:
-                params["max_completion_tokens"] = self.max_tokens
-            else:
-                params["max_tokens"] = self.max_tokens
-                params["temperature"] = (
-                    temperature if temperature is not None else self.temperature
-                )
+            # --- START CORRECTION ---
+            params["max_completion_tokens"] = self.max_tokens
+            params["temperature"] = (
+                temperature if temperature is not None else self.temperature
+            )
+            # --- END CORRECTION ---
 
             # Handle non-streaming request
             if not stream:
@@ -720,13 +717,12 @@ class LLM:
                 **kwargs,
             }
 
-            if self.model in REASONING_MODELS:
-                params["max_completion_tokens"] = self.max_tokens
-            else:
-                params["max_tokens"] = self.max_tokens
-                params["temperature"] = (
-                    temperature if temperature is not None else self.temperature
-                )
+            # --- START CORRECTION ---
+            params["max_completion_tokens"] = self.max_tokens
+            params["temperature"] = (
+                temperature if temperature is not None else self.temperature
+            )
+            # --- END CORRECTION ---
 
             params["stream"] = False  # Always use non-streaming for tool requests
             response: ChatCompletion = await self.client.chat.completions.create(

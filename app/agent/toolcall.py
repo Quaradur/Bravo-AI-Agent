@@ -37,15 +37,50 @@ class ToolCallAgent(ReActAgent):
     max_observe: Optional[Union[int, bool]] = None
 
     async def think(self) -> bool:
-        """Process current state and decide next actions using tools"""
+        """
+        Process current state and decide next actions using a two-step think-then-act process.
+        1.  **Reasoning Step**: The agent first generates a textual "thought" about what to do next.
+        2.  **Tool Selection Step**: Based on its thought, the agent then selects the appropriate tool(s) to use.
+        """
         if self.next_step_prompt:
             user_msg = Message.user_message(self.next_step_prompt)
             self.messages += [user_msg]
 
+        # --- REASONING STEP ---
+        # First, ask the LLM to generate its reasoning without giving it tools.
+        # This forces a text-only response detailing the plan.
         try:
-            # Get response with tool options
-            response = await self.llm.ask_tool(
+            # We use `ask` here, which does not send tool parameters.
+            reasoning_text = await self.llm.ask(
                 messages=self.messages,
+                system_msgs=(
+                    [Message.system_message(self.system_prompt)]
+                    if self.system_prompt
+                    else None
+                ),
+                stream=False, # We need the full thought before proceeding
+            )
+        except Exception as e:
+            logger.error(f"🚨 Error during reasoning step: {e}")
+            # If reasoning fails, we can't proceed.
+            self.state = AgentState.ERROR
+            return False
+        
+        logger.info(f"✨ {self.name}'s thoughts: {reasoning_text}")
+
+        # Create an assistant message that holds the reasoning.
+        # We will add tool calls to this same message later.
+        assistant_message = Message.assistant_message(content=reasoning_text)
+        self.memory.add_message(assistant_message)
+
+
+        # --- TOOL SELECTION STEP ---
+        # Now, ask the LLM to select tools based on the reasoning it just provided.
+        try:
+            # We use `ask_tool` here, providing the full message history (including the thought)
+            # and the available tools.
+            response = await self.llm.ask_tool(
+                messages=self.messages, # self.messages now includes the reasoning
                 system_msgs=(
                     [Message.system_message(self.system_prompt)]
                     if self.system_prompt
@@ -57,7 +92,6 @@ class ToolCallAgent(ReActAgent):
         except ValueError:
             raise
         except Exception as e:
-            # Check if this is a RetryError containing TokenLimitExceeded
             if hasattr(e, "__cause__") and isinstance(e.__cause__, TokenLimitExceeded):
                 token_limit_error = e.__cause__
                 logger.error(
@@ -72,61 +106,27 @@ class ToolCallAgent(ReActAgent):
                 return False
             raise
 
-        self.tool_calls = tool_calls = (
-            response.tool_calls if response and response.tool_calls else []
-        )
-        content = response.content if response and response.content else ""
+        self.tool_calls = response.tool_calls if response and response.tool_calls else []
 
-        # Log response info
-        logger.info(f"✨ {self.name}'s thoughts: {content}")
+        # Log the selected tools
         logger.info(
-            f"🛠️ {self.name} selected {len(tool_calls) if tool_calls else 0} tools to use"
+            f"🛠️ {self.name} selected {len(self.tool_calls) if self.tool_calls else 0} tools to use based on its reasoning."
         )
-        if tool_calls:
+        if self.tool_calls:
             logger.info(
-                f"🧰 Tools being prepared: {[call.function.name for call in tool_calls]}"
+                f"🧰 Tools being prepared: {[call.function.name for call in self.tool_calls]}"
             )
-            logger.info(f"🔧 Tool arguments: {tool_calls[0].function.arguments}")
+            logger.info(f"🔧 Tool arguments: {self.tool_calls[0].function.arguments}")
 
-        try:
-            if response is None:
-                raise RuntimeError("No response received from the LLM")
+        # Update the original assistant message with the tool calls.
+        # This links the reasoning and the action together.
+        assistant_message.tool_calls = self.tool_calls
 
-            # Handle different tool_choices modes
-            if self.tool_choices == ToolChoice.NONE:
-                if tool_calls:
-                    logger.warning(
-                        f"🤔 Hmm, {self.name} tried to use tools when they weren't available!"
-                    )
-                if content:
-                    self.memory.add_message(Message.assistant_message(content))
-                    return True
-                return False
+        # If the tool choice was 'required' but no tools were chosen, it's an issue.
+        if self.tool_choices == ToolChoice.REQUIRED and not self.tool_calls:
+            return True  # Will be handled in act()
 
-            # Create and add assistant message
-            assistant_msg = (
-                Message.from_tool_calls(content=content, tool_calls=self.tool_calls)
-                if self.tool_calls
-                else Message.assistant_message(content)
-            )
-            self.memory.add_message(assistant_msg)
-
-            if self.tool_choices == ToolChoice.REQUIRED and not self.tool_calls:
-                return True  # Will be handled in act()
-
-            # For 'auto' mode, continue with content if no commands but content exists
-            if self.tool_choices == ToolChoice.AUTO and not self.tool_calls:
-                return bool(content)
-
-            return bool(self.tool_calls)
-        except Exception as e:
-            logger.error(f"🚨 Oops! The {self.name}'s thinking process hit a snag: {e}")
-            self.memory.add_message(
-                Message.assistant_message(
-                    f"Error encountered while processing: {str(e)}"
-                )
-            )
-            return False
+        return bool(self.tool_calls)
 
     async def act(self) -> str:
         """Execute tool calls and handle their results"""
