@@ -101,9 +101,10 @@ const Logo = ({ className }: { className: string }) => (
 
 interface SiteHeaderProps {
   onPricingClick?: () => void
+  onGetStartedClick?: () => void // Added onGetStartedClick prop
 }
 
-export default function SiteHeader({ onPricingClick }: SiteHeaderProps) {
+export default function SiteHeader({ onPricingClick, onGetStartedClick }: SiteHeaderProps) {
   const [isLangMenuOpen, setLangMenuOpen] = useState(false)
   const [selectedLang, setSelectedLang] = useState("English")
   const [isTooltipVisible, setIsTooltipVisible] = useState(false)
@@ -160,7 +161,7 @@ export default function SiteHeader({ onPricingClick }: SiteHeaderProps) {
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
-        body { 
+        body {
             font-family: 'Inter', sans-serif;
             background-color: #FFFFFF;
         }
@@ -179,18 +180,18 @@ export default function SiteHeader({ onPricingClick }: SiteHeaderProps) {
             top: 100%;
             left: 50%;
             transform: translateX(-50%);
-            margin-top: 8px; 
+            margin-top: 8px;
             padding: 3px 7px;
-            background-color: #000000; 
-            color: #d1d5db; 
-            border-radius: 8px; 
+            background-color: #000000;
+            color: #d1d5db;
+            border-radius: 8px;
             font-size: 11px;
-            font-weight: 600; 
-            white-space: nowrap; 
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); 
-            opacity: 0; 
-            transition: opacity 0.2s; 
-            pointer-events: none; 
+            font-weight: 600;
+            white-space: nowrap;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
             z-index: 20;
         }
         .tooltip.visible {
@@ -293,12 +294,12 @@ export default function SiteHeader({ onPricingClick }: SiteHeaderProps) {
               </div>
 
               {/* MODIFICA: Padding orizzontale ridotto a px-3 */}
-              <a
-                href="#"
+              <button // Changed from <a> to <button> and added onClick handler
+                onClick={onGetStartedClick}
                 className="px-3 py-2 bg-black text-white text-sm font-semibold rounded-full hover:bg-zinc-800 transition-colors"
               >
                 Get Started
-              </a>
+              </button>
             </div>
           </div>
         </div>
@@ -306,3 +307,4 @@ export default function SiteHeader({ onPricingClick }: SiteHeaderProps) {
     </>
   )
 }
+
