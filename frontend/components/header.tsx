@@ -2,10 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 
-// --- Componenti Icona SVG ---
-// Questi sono componenti funzionali che rendono le icone SVG.
-// L'uso di 'currentColor' permette di colorare l'SVG tramite classi CSS di testo (es. text-gray-800).
-
+// --- Icone SVG ---
 const GlobeIcon = ({ className }: { className: string }) => (
   <svg className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path
@@ -64,44 +61,17 @@ const CheckIcon = ({ className }: { className: string }) => (
 )
 
 const Logo = ({ className }: { className: string }) => (
-  <svg
+  <img
+    src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Logo%20Bravo%20AI%20con%20scritta%20Nero-q6ncQH7TcB2ndwhznHluCARKWvRu5s.png"
+    alt="Bravo AI"
     className={className}
-    width="100"
-    height="28"
-    viewBox="0 0 100 28"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path
-      d="M26.4785 16.333C26.4785 16.333 27.3115 14.453 28.5605 14.162C29.8095 13.871 31.3495 15.111 31.3495 15.111L30.4335 21.071L24.8945 22.031L23.4145 13.043L25.0425 12.827C25.0425 12.827 25.4595 12.999 25.5425 13.518C25.6255 14.037 26.4785 16.333 26.4785 16.333Z"
-      fill="#111827"
-    />
-    <path
-      d="M13.6885 11.666C13.6885 11.666 12.8555 13.546 11.6065 13.837C10.3575 14.128 8.81748 12.888 8.81748 12.888L9.73348 6.92801L15.2725 5.96801L16.7525 14.956L15.1245 15.172C15.1245 15.172 14.7075 15.0001 14.6245 14.481C14.5415 13.962 13.6885 11.666 13.6885 11.666Z"
-      fill="#111827"
-    />
-    <path d="M19.9995 5.16699L18.8335 6.33299L19.9995 7.49999L21.1665 6.33299L19.9995 5.16699Z" fill="#111827" />
-    <path d="M19.9995 1.66699L16.3335 5.33299L19.9995 8.99999L23.6665 5.33299L19.9995 1.66699Z" fill="#111827" />
-    <path d="M19.9995 2.83301L22.5005 5.33301L19.9995 7.83301L17.5005 5.33301L19.9995 2.83301Z" fill="#111827" />
-    <path
-      d="M42.2773 21.5V8.5H44.8333V18.884L52.1413 8.5H55.0573V21.5H52.5013V11.116L45.1933 21.5H42.2773Z"
-      fill="#111827"
-    />
-    <path
-      d="M63.3333 18.296C63.3333 19.16 63.0533 19.88 62.4933 20.456C61.9333 21.032 61.1813 21.32 60.2373 21.32C59.2933 21.32 58.5413 21.032 57.9813 20.456C57.4213 19.88 57.1413 19.16 57.1413 18.296V11.704C57.1413 10.84 57.4213 10.12 57.9813 9.544C58.5413 8.968 59.2933 8.68 60.2373 8.68C61.1813 8.68 61.9333 8.968 62.4933 9.544C63.0533 10.12 63.3333 10.84 63.3333 11.704V18.296ZM60.2373 19.48C60.6533 19.48 60.9653 19.228 61.1733 18.724V11.276C60.9653 10.772 60.6533 10.52 60.2373 10.52C59.8213 10.52 59.5093 10.772 59.3013 11.276V18.724C59.5093 19.228 59.8213 19.48 60.2373 19.48Z"
-      fill="#111827"
-    />
-    <path
-      d="M66.4531 21.5V8.5H76.2691V10.34H68.9491V13.96H75.1171V15.8H68.9491V19.66H76.4931V21.5H66.4531Z"
-      fill="#111827"
-    />
-    <path d="M86.7396 21.5V8.5H89.2956V19.66H96.4956V21.5H86.7396Z" fill="#111827" />
-  </svg>
+    style={{ width: "105.27px", height: "36px" }}
+  />
 )
 
 interface SiteHeaderProps {
   onPricingClick?: () => void
-  onGetStartedClick?: () => void // Added onGetStartedClick prop
+  onGetStartedClick?: () => void
 }
 
 export default function SiteHeader({ onPricingClick, onGetStartedClick }: SiteHeaderProps) {
@@ -109,7 +79,7 @@ export default function SiteHeader({ onPricingClick, onGetStartedClick }: SiteHe
   const [selectedLang, setSelectedLang] = useState("English")
   const [isTooltipVisible, setIsTooltipVisible] = useState(false)
   const langMenuRef = useRef<HTMLDivElement>(null)
-  const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const tooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const languages = [
     "Deutsch",
@@ -138,130 +108,91 @@ export default function SiteHeader({ onPricingClick, onGetStartedClick }: SiteHe
       }
     }
     document.addEventListener("mousedown", handleClickOutside)
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-    }
-  }, [langMenuRef])
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
 
-  // Funzioni per gestire la visibilità del tooltip con un ritardo
   const handleTooltipEnter = () => {
-    if (tooltipTimeoutRef.current) {
-      clearTimeout(tooltipTimeoutRef.current)
-    }
+    if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current)
     setIsTooltipVisible(true)
   }
 
   const handleTooltipLeave = () => {
-    tooltipTimeoutRef.current = setTimeout(() => {
-      setIsTooltipVisible(false)
-    }, 150) // Un piccolo ritardo per permettere al cursore di spostarsi sul tooltip
+    tooltipTimeoutRef.current = setTimeout(() => setIsTooltipVisible(false), 150)
   }
 
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #FFFFFF;
+
+        .font-system {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
         }
-        .font-lora {
-          font-family: 'Lora', serif;
-        }
-        .font-inter {
-          font-family: 'Inter', sans-serif;
-        }
-        .tooltip-container {
-            position: relative;
-            display: inline-block;
-        }
+        .text-main { color: #34322D; }
+        .text-subtle { color: #5E5E5B; }
+        .btn-get-started { font-size: 14px; color: #FFFFFF; background-color: #1A1A19; }
+
+        body { margin: 0; font-family: 'Inter', sans-serif; background-color: #FFFFFF; }
+        .font-lora { font-family: 'Lora', serif; }
+        .font-inter { font-family: 'Inter', sans-serif; }
+        .tooltip-container { position: relative; display: inline-block; }
         .tooltip {
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            margin-top: 8px;
-            padding: 3px 7px;
-            background-color: #000000;
-            color: #d1d5db;
-            border-radius: 8px;
-            font-size: 11px;
-            font-weight: 600;
-            white-space: nowrap;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            opacity: 0;
-            transition: opacity 0.2s;
-            pointer-events: none;
-            z-index: 20;
+          position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 8px;
+          padding: 3px 7px; background-color: #000000; color: #d1d5db; border-radius: 8px;
+          font-size: 11px; font-weight: 600; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,.1);
+          opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20;
         }
-        .tooltip.visible {
-            opacity: 1;
-            pointer-events: auto;
-        }
-        .custom-scrollbar {
-            scrollbar-width: thin;
-            scrollbar-color: transparent transparent;
-        }
-        .custom-scrollbar:hover {
-            scrollbar-color: #ccc transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background-color: transparent;
-            border-radius: 3px;
-        }
-        .custom-scrollbar:hover::-webkit-scrollbar-thumb {
-            background-color: #ccc;
-        }
+        .tooltip.visible { opacity: 1; pointer-events: auto; }
+        .custom-scrollbar { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+        .custom-scrollbar:hover { scrollbar-color: #ccc transparent; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: transparent; border-radius: 3px; }
+        .custom-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #ccc; }
       `}</style>
-      <header className="bg-white text-gray-800 font-inter">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
-            {/* Lato sinistro: Logo e Navigazione */}
-            <div className="flex items-center space-x-8">
-              <a href="#" aria-label="Homepage">
-                <Logo className="h-7" />
+
+      <header className="bg-white font-system">
+        <div className="max-w-screen-2xl mx-auto px-12">
+          {/* Riga principale: padding-top 20px per i pulsanti; il logo viene compensato a -11px */}
+          <div className="flex items-start justify-between pt-[20px] pb-4">
+            {/* Colonna sinistra */}
+            <div className="flex items-start space-x-8">
+              {/* Logo: trattato come "fuori" dal header → 9px dal top pagina (20 - 11) */}
+              <a href="#" aria-label="Homepage" className="flex items-center cursor-pointer -mt-[11px]">
+                <Logo className="" />
               </a>
-              <nav className="hidden md:flex items-center space-x-6 text-sm font-medium">
-                <a href="#" className="text-gray-700 hover:text-gray-500 transition-colors">
-                  Use cases
-                </a>
-                <a href="#" className="text-gray-700 hover:text-gray-500 transition-colors">
-                  Community
-                </a>
-                <a href="#" className="text-gray-700 hover:text-gray-500 transition-colors">
-                  Benchmarks
-                </a>
-                <button onClick={onPricingClick} className="text-gray-700 hover:text-gray-500 transition-colors">
+
+              {/* Nav sinistro: nessun offset verticale aggiuntivo → 20px dal top pagina */}
+              <nav className="hidden md:flex items-center space-x-6 font-medium text-sm">
+                <a href="#" className="text-main hover:text-gray-500 transition-colors cursor-pointer">Use cases</a>
+                <a href="#" className="text-main hover:text-gray-500 transition-colors cursor-pointer">Community</a>
+                <a href="#" className="text-main hover:text-gray-500 transition-colors cursor-pointer">Benchmarks</a>
+                <button onClick={onPricingClick} className="text-main hover:text-gray-500 transition-colors cursor-pointer">
                   Pricing
                 </button>
               </nav>
             </div>
 
-            {/* Lato destro: Azioni */}
-            <div className="flex items-center space-x-2 sm:space-x-4">
+            {/* Colonna destra: lingua, notifiche, CTA → 20px dal top pagina */}
+            <div className="flex items-center space-x-6">
               <div className="relative hidden sm:block" ref={langMenuRef}>
                 <button
                   onClick={() => setLangMenuOpen(!isLangMenuOpen)}
-                  className="flex items-center space-x-1 text-sm text-gray-700 rounded-lg px-2 py-1.5 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                  className="flex items-center space-x-1 text-main rounded-lg px-2 py-1.5 hover:bg-gray-100 transition-colors cursor-pointer text-sm"
                 >
                   <GlobeIcon className="w-4 h-4" />
                   <span>{selectedLang}</span>
                   <ChevronDownIcon className={`w-4 h-4 transition-transform ${isLangMenuOpen ? "rotate-180" : ""}`} />
                 </button>
+
                 {isLangMenuOpen && (
-                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
                     <ul className="py-1 max-h-[360px] overflow-y-auto custom-scrollbar">
                       {languages.map((lang) => (
                         <li key={lang}>
                           <a
                             href="#"
-                            className="flex justify-between items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            className="flex justify-between items-center px-4 py-2 text-subtle hover:bg-gray-100 cursor-pointer font-system text-sm"
                             onClick={(e) => {
                               e.preventDefault()
                               setSelectedLang(lang)
@@ -278,9 +209,8 @@ export default function SiteHeader({ onPricingClick, onGetStartedClick }: SiteHe
                 )}
               </div>
 
-              {/* Contenitore del tooltip gestito con JavaScript */}
               <div className="tooltip-container" onMouseEnter={handleTooltipEnter} onMouseLeave={handleTooltipLeave}>
-                <button className="p-2 text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
+                <button className="p-2 text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">
                   <NotificationIcon className="w-5 h-5" />
                   <span className="sr-only">Notifications</span>
                 </button>
@@ -293,10 +223,9 @@ export default function SiteHeader({ onPricingClick, onGetStartedClick }: SiteHe
                 </div>
               </div>
 
-              {/* MODIFICA: Padding orizzontale ridotto a px-3 */}
-              <button // Changed from <a> to <button> and added onClick handler
+              <button
                 onClick={onGetStartedClick}
-                className="px-3 py-2 bg-black text-white text-sm font-semibold rounded-full hover:bg-zinc-800 transition-colors"
+                className="px-3 py-2 rounded-full hover:opacity-90 transition-opacity cursor-pointer font-system btn-get-started"
               >
                 Get Started
               </button>
@@ -307,4 +236,32 @@ export default function SiteHeader({ onPricingClick, onGetStartedClick }: SiteHe
     </>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
