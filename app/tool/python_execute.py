@@ -42,34 +42,58 @@ class PythonExecute(BaseTool):
         timeout: int = 5,
     ) -> Dict:
         """
-        Executes the provided Python code with a timeout.
-
-        Args:
-            code (str): The Python code to execute.
-            timeout (int): Execution timeout in seconds.
-
-        Returns:
-            Dict: Contains 'output' with execution output or error message and 'success' status.
+        Executes the provided Python code with a timeout and sends the result to the frontend.
         """
+        # --- INIZIO MODIFICA 1: Invia l'evento 'action' al frontend ---
+        # Annuncia l'azione nel flusso di eventi prima di eseguirla.
+        if self.callback_handler:
+            # Tronca il codice se è troppo lungo per una visualizzazione pulita
+            content_preview = (code[:70] + '...') if len(code) > 70 else code
+            await self.callback_handler(
+                "action",
+                title="🐍 Python: Esecuzione Script",
+                content=content_preview.replace('\n', ' ')
+            )
+        # --- FINE MODIFICA 1 ---
 
         with multiprocessing.Manager() as manager:
-            result = manager.dict({"observation": "", "success": False})
+            result_proxy = manager.dict({"observation": "", "success": False})
             if isinstance(__builtins__, dict):
                 safe_globals = {"__builtins__": __builtins__}
             else:
                 safe_globals = {"__builtins__": __builtins__.__dict__.copy()}
+
             proc = multiprocessing.Process(
-                target=self._run_code, args=(code, result, safe_globals)
+                target=self._run_code, args=(code, result_proxy, safe_globals)
             )
             proc.start()
             proc.join(timeout)
 
-            # timeout process
             if proc.is_alive():
                 proc.terminate()
                 proc.join(1)
-                return {
+                final_result = {
                     "observation": f"Execution timeout after {timeout} seconds",
                     "success": False,
                 }
-            return dict(result)
+            else:
+                final_result = dict(result_proxy)
+
+        # --- INIZIO MODIFICA 2: Invia l'output del terminale al frontend ---
+        if self.callback_handler:
+            terminal_content = (
+                f">>> # Esecuzione del codice Python:\n"
+                f">>> {code}\n"
+                f"{final_result['observation']}"
+            )
+
+            await self.callback_handler(
+                "terminal_output",
+                content=terminal_content.strip()
+            )
+        # --- FINE MODIFICA 2 ---
+
+        return final_result
+
+
+

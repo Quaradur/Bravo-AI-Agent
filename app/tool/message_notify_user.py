@@ -15,9 +15,16 @@ class MessageNotifyUserTool(BaseTool):
     }
 
     async def execute(self, text: str) -> ToolResult:
-        # In un'app web, questo invierebbe un messaggio via WebSocket.
-        # Nel nostro terminale, lo stampiamo con una chiara etichetta.
-        formatted_message = f"\n--- AGENT NOTIFICATION ---\n{text}\n--------------------------\n"
-        print(formatted_message)
+        # --- INIZIO MODIFICA: Invia il messaggio al frontend ---
+        if self.callback_handler:
+            # Invia il messaggio direttamente alla chat del frontend.
+            await self.callback_handler("chat", content=text)
+        # --- FINE MODIFICA ---
+
+        # Il vecchio print non è più necessario in un'app web.
+        # formatted_message = f"\n--- AGENT NOTIFICATION ---\n{text}\n--------------------------\n"
+        # print(formatted_message)
+
         # Questo strumento non interrompe il flusso, quindi restituisce un semplice output di successo.
         return ToolResult(output="Notification sent to user.")
+

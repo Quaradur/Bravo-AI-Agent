@@ -17,7 +17,9 @@ class BaseFlow(BaseModel, ABC):
         arbitrary_types_allowed = True
 
     def __init__(
-        self, agents: Union[BaseAgent, List[BaseAgent], Dict[str, BaseAgent]], **data
+        self,
+        agents: Union[BaseAgent, List[BaseAgent], Dict[str, BaseAgent]],
+        **data,
     ):
         # Handle different ways of providing agents
         if isinstance(agents, BaseAgent):
@@ -55,3 +57,5 @@ class BaseFlow(BaseModel, ABC):
     @abstractmethod
     async def execute(self, input_text: str) -> str:
         """Execute the flow with given input"""
+
+

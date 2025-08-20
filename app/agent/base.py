@@ -1,6 +1,10 @@
+# app/agent/base.py
+
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-from typing import List, Optional, Any
+# --- INIZIO MODIFICA: Aggiunta import per il type hinting del callback ---
+from typing import List, Optional, Any, Callable, Awaitable
+# --- FINE MODIFICA ---
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -8,7 +12,6 @@ from app.llm import LLM
 from app.logger import logger
 from app.sandbox.client import SANDBOX_CLIENT
 from app.schema import ROLE_TYPE, AgentState, Memory, Message
-# Importiamo lo Scratchpad per usarlo come tipo
 from app.utils.scratchpad import Scratchpad
 
 
@@ -41,13 +44,17 @@ class BaseAgent(BaseModel, ABC):
     # Execution control
     max_steps: int = Field(default=10, description="Maximum steps before termination")
     current_step: int = Field(default=0, description="Current step in execution")
-
     duplicate_threshold: int = 2
-    
-    # --- INIZIO MODIFICA ---
-    # Aggiungiamo un riferimento allo scratchpad
+
+    # Shared memory/data stores
     scratchpad: Optional[Scratchpad] = None
+
+    # --- INIZIO MODIFICA: Aggiunta del callback_handler ---
+    # Questo campo conterrà la funzione per inviare messaggi al frontend.
+    # Sarà None di default e verrà "iniettato" dal Flow o dal Session Manager.
+    callback_handler: Optional[Callable[[str, Any], Awaitable[None]]] = None
     # --- FINE MODIFICA ---
+
 
     class Config:
         arbitrary_types_allowed = True
@@ -99,7 +106,6 @@ class BaseAgent(BaseModel, ABC):
         kwargs = {"base64_image": base64_image, **(kwargs if role == "tool" else {})}
         self.memory.add_message(message_map[role](content, **kwargs))
 
-    # --- INIZIO MODIFICA: Aggiorniamo la firma del metodo run ---
     async def run(self, request: Optional[str] = None, scratchpad: Optional[Scratchpad] = None) -> str:
         """Execute the agent's main loop asynchronously."""
         if self.state not in [AgentState.IDLE, AgentState.AWAITING_USER_INPUT]:
@@ -107,7 +113,6 @@ class BaseAgent(BaseModel, ABC):
 
         # Assegna lo scratchpad all'agente per questa esecuzione
         self.scratchpad = scratchpad
-    # --- FINE MODIFICA ---
 
         if request:
             self.update_memory("user", request)
@@ -119,6 +124,13 @@ class BaseAgent(BaseModel, ABC):
             ):
                 self.current_step += 1
                 logger.info(f"Executing step {self.current_step}/{self.max_steps}")
+
+                # --- INIZIO MODIFICA: Invia un messaggio di "pensiero" al frontend ---
+                # Prima di eseguire un passo, l'agente può comunicare cosa sta per fare.
+                if self.callback_handler:
+                    await self.callback_handler("thought", f"Inizio lo step {self.current_step}: sto decidendo la prossima azione...")
+                # --- FINE MODIFICA ---
+
                 step_result = await self.step()
 
                 if hasattr(step_result, "system") and step_result.system == "AWAITING_USER_INPUT":
@@ -136,10 +148,10 @@ class BaseAgent(BaseModel, ABC):
                 self.current_step = 0
                 self.state = AgentState.IDLE
                 results.append(f"Terminated: Reached max steps ({self.max_steps})")
-        
+
         if self.state != AgentState.AWAITING_USER_INPUT:
             await SANDBOX_CLIENT.cleanup()
-            
+
         return "\n".join(results) if results else "No steps executed"
 
     @abstractmethod
@@ -179,3 +191,5 @@ class BaseAgent(BaseModel, ABC):
     def messages(self, value: List[Message]):
         """Set the list of messages in the agent's memory."""
         self.memory.messages = value
+
+

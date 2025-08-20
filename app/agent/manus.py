@@ -11,13 +11,14 @@ from app.prompt.manus import NEXT_STEP_PROMPT, SYSTEM_PROMPT
 from app.tool import ToolCollection
 from app.tool.mcp import MCPClients, MCPClientTool
 from app.tool.idle import IdleTool
-
-# --- INIZIO MODIFICA: Caricamento dinamico degli strumenti ---
 from app.utils.tool_loader import load_tools_from_directory
-
-# Definiamo la directory da cui caricare gli strumenti
-TOOL_DIR = PROJECT_ROOT / "app" / "tool"
+from app.tool.base import ToolResult
+# --- INIZIO MODIFICA: Importiamo ToolCall dallo schema ---
+from app.schema import ToolCall
 # --- FINE MODIFICA ---
+
+
+TOOL_DIR = PROJECT_ROOT / "app" / "tool"
 
 
 class Manus(ToolCallAgent):
@@ -34,15 +35,11 @@ class Manus(ToolCallAgent):
 
     mcp_clients: MCPClients = Field(default_factory=MCPClients)
 
-    # --- INIZIO MODIFICA: Utilizzo del caricatore dinamico ---
-    # La lista di strumenti non è più statica. Viene costruita dinamicamente
-    # all'avvio dell'agente chiamando la nostra nuova funzione di utilità.
     available_tools: ToolCollection = Field(
         default_factory=lambda: ToolCollection(
             *load_tools_from_directory(TOOL_DIR)
         )
     )
-    # --- FINE MODIFICA ---
 
     special_tool_names: list[str] = Field(default_factory=lambda: [IdleTool().name])
     browser_context_helper: Optional[BrowserContextHelper] = None
@@ -52,9 +49,85 @@ class Manus(ToolCallAgent):
 
     @model_validator(mode="after")
     def initialize_helper(self) -> "Manus":
-        """Initialize basic components synchronously."""
+        """Initialize components and inject callbacks into tools."""
         self.browser_context_helper = BrowserContextHelper(self)
+
+        if self.callback_handler:
+            for tool in self.available_tools.tools:
+                tool.callback_handler = self.callback_handler
+
         return self
+
+    async def step(self) -> ToolResult:
+        """
+        Executes one step of the agent's thinking and action loop,
+        adding communication for thoughts.
+        """
+        should_continue = await self.think()
+        if not should_continue:
+            last_message = self.memory.messages[-1]
+            if self.callback_handler and last_message.content:
+                await self.callback_handler("summary", content=last_message.content)
+            return ToolResult(output="No tool call was made.")
+
+        last_message = self.memory.messages[-1]
+        tool_calls = last_message.tool_calls
+        thought = last_message.content
+
+        if thought and self.callback_handler:
+            await self.callback_handler("thought", content=thought)
+
+        results = await self.execute_tool_calls(tool_calls)
+
+        for res in results:
+            self.update_memory("tool", res.output, tool_call_id=res.tool_call_id)
+
+        return sum(results, ToolResult())
+
+    # --- INIZIO MODIFICA: Override di execute_tool_calls per inviare eventi 'action' ---
+    async def execute_tool_calls(self, tool_calls: List[ToolCall]) -> List[ToolResult]:
+        """
+        Executes tool calls sequentially, sending 'action' events to the frontend
+        before each execution.
+        """
+        results = []
+        if not tool_calls:
+            return results
+
+        for tool_call in tool_calls:
+            tool_name = tool_call.function.name
+            tool_args = tool_call.function.arguments
+
+            if self.callback_handler:
+                # Mappiamo i nomi dei tool a titoli più leggibili con icone
+                title = f"⚙️ Esecuzione: {tool_name}"
+                if "file" in tool_name:
+                    title = f"📄 File: {tool_name}"
+                elif "browser" in tool_name:
+                    title = f"🌐 Browser: {tool_name}"
+                elif "shell" in tool_name or "bash" in tool_name:
+                    title = f">_ Terminale: {tool_name}"
+                elif "python" in tool_name:
+                    title = f"🐍 Python: {tool_name}"
+                elif "planning" in tool_name:
+                    title = f"📝 Planning: {tool_name}"
+
+                # Formattiamo gli argomenti per una visualizzazione pulita
+                content = ", ".join(f"{k}='{v}'" for k, v in tool_args.items())
+
+                await self.callback_handler(
+                    "action",
+                    title=title,
+                    content=content
+                )
+
+            # Eseguiamo la singola chiamata al tool usando la logica della classe padre
+            # (assumendo che esista un metodo per l'esecuzione singola)
+            result = await super().execute_tool_call(tool_call)
+            results.append(result)
+
+        return results
+    # --- FINE MODIFICA ---
 
     @classmethod
     async def create(cls, **kwargs) -> "Manus":
@@ -70,46 +143,27 @@ class Manus(ToolCallAgent):
             return
         for server_id, server_config in config.mcp_config.servers.items():
             try:
-                if server_config.type == "sse":
-                    if server_config.url:
-                        await self.connect_mcp_server(server_config.url, server_id)
-                        logger.info(
-                            f"Connected to MCP server {server_id} at {server_config.url}"
-                        )
-                elif server_config.type == "stdio":
-                    if server_config.command:
-                        await self.connect_mcp_server(
-                            server_config.command,
-                            server_id,
-                            use_stdio=True,
-                            stdio_args=server_config.args,
-                        )
-                        logger.info(
-                            f"Connected to MCP server {server_id} using command {server_config.command}"
-                        )
+                if server_config.type == "sse" and server_config.url:
+                    await self.connect_mcp_server(server_config.url, server_id)
+                    logger.info(f"Connected to MCP server {server_id} at {server_config.url}")
+                elif server_config.type == "stdio" and server_config.command:
+                    await self.connect_mcp_server(
+                        server_config.command, server_id, use_stdio=True, stdio_args=server_config.args
+                    )
+                    logger.info(f"Connected to MCP server {server_id} using command {server_config.command}")
             except Exception as e:
                 logger.error(f"Failed to connect to MCP server {server_id}: {e}")
 
     async def connect_mcp_server(
-        self,
-        server_url: str,
-        server_id: str = "",
-        use_stdio: bool = False,
-        stdio_args: List[str] = None,
+        self, server_url: str, server_id: str = "", use_stdio: bool = False, stdio_args: List[str] = None
     ) -> None:
         """Connect to an MCP server and add its tools."""
         if use_stdio:
-            await self.mcp_clients.connect_stdio(
-                server_url, stdio_args or [], server_id
-            )
-            self.connected_servers[server_id or server_url] = server_url
+            await self.mcp_clients.connect_stdio(server_url, stdio_args or [], server_id)
         else:
             await self.mcp_clients.connect_sse(server_url, server_id)
-            self.connected_servers[server_id or server_url] = server_url
-
-        new_tools = [
-            tool for tool in self.mcp_clients.tools if tool.server_id == server_id
-        ]
+        self.connected_servers[server_id or server_url] = server_url
+        new_tools = [tool for tool in self.mcp_clients.tools if tool.server_id == server_id]
         self.available_tools.add_tools(*new_tools)
 
     async def disconnect_mcp_server(self, server_id: str = "") -> None:
@@ -119,12 +173,7 @@ class Manus(ToolCallAgent):
             self.connected_servers.pop(server_id, None)
         else:
             self.connected_servers.clear()
-
-        base_tools = [
-            tool
-            for tool in self.available_tools.tools
-            if not isinstance(tool, MCPClientTool)
-        ]
+        base_tools = [tool for tool in self.available_tools.tools if not isinstance(tool, MCPClientTool)]
         self.available_tools = ToolCollection(*base_tools)
         self.available_tools.add_tools(*self.mcp_clients.tools)
 
@@ -144,7 +193,7 @@ class Manus(ToolCallAgent):
 
         original_prompt = self.next_step_prompt
         recent_messages = self.memory.messages[-3:] if self.memory.messages else []
-        
+
         browser_in_use = any(
             tc.function.name.startswith("browser_")
             for msg in recent_messages
@@ -153,11 +202,10 @@ class Manus(ToolCallAgent):
         )
 
         if browser_in_use:
-            self.next_step_prompt = (
-                await self.browser_context_helper.format_next_step_prompt()
-            )
+            self.next_step_prompt = await self.browser_context_helper.format_next_step_prompt()
 
         result = await super().think()
-
         self.next_step_prompt = original_prompt
         return result
+
+

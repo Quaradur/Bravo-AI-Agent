@@ -30,6 +30,7 @@ class FileStrReplaceTool(BaseTool):
             return ToolResult(error=f"File not found at: {file}")
 
         try:
+            # 1. Leggi, modifica e riscrivi il file
             with open(file, 'r', encoding='utf-8') as f:
                 content = f.read()
 
@@ -38,6 +39,31 @@ class FileStrReplaceTool(BaseTool):
             with open(file, 'w', encoding='utf-8') as f:
                 f.write(new_content)
 
+            # --- INIZIO MODIFICA: Invia il contenuto aggiornato al frontend ---
+            if self.callback_handler:
+                # Determina il linguaggio per la sintassi evidenziata
+                language = "plaintext"
+                if "." in file:
+                    ext = file.split('.')[-1]
+                    lang_map = {
+                        "py": "python", "js": "javascript", "ts": "typescript",
+                        "html": "html", "css": "css", "json": "json",
+                        "md": "markdown", "sh": "shell", "tsx": "typescript"
+                    }
+                    language = lang_map.get(ext, "plaintext")
+
+                # Invia il nuovo contenuto del file all'editor
+                await self.callback_handler(
+                    "code_editor",
+                    content=new_content,
+                    language=language
+                )
+            # --- FINE MODIFICA ---
+
             return ToolResult(output=f"Successfully replaced string in file: {file}")
+
         except Exception as e:
-            return ToolResult(error=f"Failed to perform string replacement in '{file}': {str(e)}")
+            error_message = f"Failed to perform string replacement in '{file}': {str(e)}"
+            if self.callback_handler:
+                 await self.callback_handler("chat", content=f"⚠️ Errore File: {error_message}")
+            return ToolResult(error=error_message)

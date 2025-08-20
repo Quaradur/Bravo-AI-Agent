@@ -52,7 +52,7 @@ class _BashSession:
             return
         self._process.terminate()
 
-    async def run(self, command: str):
+    async def run(self, command: str, callback_handler=None):
         """Execute a command in the bash shell."""
         if not self._started:
             raise ToolError("Session has not started.")
@@ -66,29 +66,23 @@ class _BashSession:
                 f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
             )
 
-        # we know these are not None because we created the process with PIPEs
         assert self._process.stdin
         assert self._process.stdout
         assert self._process.stderr
 
-        # send command to the process
         self._process.stdin.write(
             command.encode() + f"; echo '{self._sentinel}'\n".encode()
         )
         await self._process.stdin.drain()
 
-        # read output from the process, until the sentinel is found
         try:
             async with asyncio.timeout(self._timeout):
                 while True:
                     await asyncio.sleep(self._output_delay)
-                    # if we read directly from stdout/stderr, it will wait forever for
-                    # EOF. use the StreamReader buffer directly instead.
                     output = (
                         self._process.stdout._buffer.decode()
                     )  # pyright: ignore[reportAttributeAccessIssue]
                     if self._sentinel in output:
-                        # strip the sentinel and break
                         output = output[: output.index(self._sentinel)]
                         break
         except asyncio.TimeoutError:
@@ -106,9 +100,18 @@ class _BashSession:
         if error.endswith("\n"):
             error = error[:-1]
 
-        # clear the buffers so that the next output can be read correctly
         self._process.stdout._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue]
         self._process.stderr._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue]
+
+        # Invia l'output del terminale al pannello di destra
+        if callback_handler:
+            full_output = f"root@agent:~$ {command}\n"
+            if output:
+                full_output += f"{output}\n"
+            if error:
+                full_output += f"{error}\n"
+
+            await callback_handler("terminal_output", content=full_output.strip())
 
         return CLIResult(output=output, error=error)
 
@@ -139,7 +142,6 @@ class Bash(BaseTool):
                 self._session.stop()
             self._session = _BashSession()
             await self._session.start()
-
             return CLIResult(system="tool has been restarted.")
 
         if self._session is None:
@@ -147,7 +149,17 @@ class Bash(BaseTool):
             await self._session.start()
 
         if command is not None:
-            return await self._session.run(command)
+            # --- INIZIO MODIFICA: Invia l'evento 'action' al frontend ---
+            # Annuncia l'azione nel flusso di eventi prima di eseguirla.
+            if self.callback_handler:
+                await self.callback_handler(
+                    "action",
+                    title=">_ Terminale: Esecuzione Comando",
+                    content=command
+                )
+            # --- FINE MODIFICA ---
+
+            return await self._session.run(command, callback_handler=self.callback_handler)
 
         raise ToolError("no command provided.")
 
@@ -156,3 +168,5 @@ if __name__ == "__main__":
     bash = Bash()
     rst = asyncio.run(bash.execute("ls -l"))
     print(rst)
+
+

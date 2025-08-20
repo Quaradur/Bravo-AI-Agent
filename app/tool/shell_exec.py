@@ -26,13 +26,18 @@ class ShellExecTool(BaseTool):
     async def execute(self, command: str, exec_dir: str = None) -> ToolResult:
         if not exec_dir:
             exec_dir = str(config.workspace_root)
-        
-        # --- INIZIO MODIFICA: Logica di Compatibilità Cross-Platform ---
-        # Sostituisce automaticamente 'python3' con 'python' se il sistema operativo è Windows.
-        # Questo rende l'agente più robusto e gli impedisce di fallire su diversi ambienti.
+
+        # Logica di compatibilità per Windows
         if sys.platform == "win32" and command.strip().startswith("python3"):
             command = "python" + command.strip()[len("python3"):]
-        # --- FINE MODIFICA ---
+
+        # Invia l'evento 'action' al frontend
+        if self.callback_handler:
+            await self.callback_handler(
+                "action",
+                title=">_ Terminale: Avvio Comando",
+                content=command
+            )
 
         try:
             process = await asyncio.create_subprocess_shell(
@@ -41,10 +46,19 @@ class ShellExecTool(BaseTool):
                 stderr=asyncio.subprocess.PIPE,
                 cwd=exec_dir
             )
-            
+
             session_id = shell_manager.create_session(command, process)
-            
+
             return ToolResult(output=f"Command '{command}' started in background with session ID: {session_id}. Use 'shell_view' to see the output.")
 
         except Exception as e:
-            return ToolResult(error=f"Failed to start command '{command}': {str(e)}")
+            error_message = f"Failed to start command '{command}': {str(e)}"
+            if self.callback_handler:
+                 await self.callback_handler("summary", content=f"⚠️ Errore Terminale: {error_message}")
+            return ToolResult(error=error_message)
+
+
+
+
+
+
