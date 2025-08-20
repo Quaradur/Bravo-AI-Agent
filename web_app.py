@@ -2,13 +2,13 @@
 
 import asyncio
 import os
-import json
 from pathlib import Path
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 
 # Import specifici del tuo progetto
 from app.agent.manus import Manus
@@ -18,19 +18,13 @@ from app.config import WORKSPACE_ROOT
 # --- 1. Setup dell'Applicazione FastAPI ---
 app = FastAPI()
 
-# Configurazione di CORS per permettere la comunicazione con il frontend
-# NOTA: Per lo sviluppo, si usano origini specifiche. Per una maggiore flessibilità
-# si potrebbe usare ["*"] come nella versione precedente.
-origins = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-]
-
+# --- MODIFICA FONDAMENTALE ---
+# Abbiamo cambiato la configurazione di CORS per essere più permissiva,
+# che è la pratica standard per lo sviluppo locale e risolve
+# i problemi di connessione WebSocket.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # Permette connessioni da qualsiasi origine
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,7 +49,12 @@ class ConnectionManager:
     async def send_json(self, session_id: str, data: Dict[str, Any]):
         """Invia dati JSON a un client specifico."""
         if session_id in self.active_connections:
-            await self.active_connections[session_id].send_json(data)
+            try:
+                await self.active_connections[session_id].send_json(data)
+            except Exception as e:
+                logger.warning(f"Could not send message to disconnected session {session_id}: {e}")
+                self.disconnect(session_id)
+
 
 manager = ConnectionManager()
 
@@ -75,13 +74,11 @@ class AgentSessionManager:
             if session_id not in self.sessions:
                 logger.info(f"Creating new agent for session: {session_id}")
 
-                # Definiamo la funzione di callback qui, per catturare il session_id
                 async def send_to_frontend(message_type: str, content: any, **kwargs):
                     payload = {"type": message_type, "content": content, **kwargs}
                     await manager.send_json(session_id, payload)
                     print(f"Sent to frontend ({session_id}): {payload}")
 
-                # Creiamo l'agente Manus, passandogli il callback
                 agent = Manus(callback_handler=send_to_frontend)
                 self.sessions[session_id] = agent
             return self.sessions[session_id]
@@ -107,7 +104,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     await manager.connect(websocket, session_id)
     try:
         while True:
-            # Mantiene la connessione aperta per ricevere messaggi dal server
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(session_id)
@@ -119,7 +115,6 @@ async def chat_endpoint(request: ChatRequest):
     prompt = request.prompt
 
     await manager.send_json(session_id, {"type": "user_message", "content": prompt})
-    # Avvia l'esecuzione dell'agente come task in background
     asyncio.create_task(run_agent_task(session_id, prompt))
 
     return {"status": "Agent task started. Results will be streamed via WebSocket."}
@@ -133,7 +128,6 @@ async def run_agent_task(session_id: str, prompt: str):
             "type": "agent_response",
             "content": response
         })
-        # Aggiungiamo il messaggio di completamento del task
         await manager.send_json(session_id, {
             "type": "task_complete",
             "content": "Task completato."
@@ -185,7 +179,8 @@ async def read_workspace_file(file_path: str):
 # Comando per avviare: uvicorn web_app:app --reload
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    # Esegui il server uvicorn
     uvicorn.run("web_app:app", host="0.0.0.0", port=port, reload=True)
+
+
 
 
