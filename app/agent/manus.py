@@ -80,14 +80,14 @@ class Manus(ToolCallAgent):
         results = await self.execute_tool_calls(tool_calls)
 
         for res in results:
-            # CORREZIONE: Aggiungiamo 'name=res.name' alla chiamata
-            self.update_memory("tool", res.output, tool_call_id=res.tool_call_id, name=res.name)
+            # CORREZIONE: Passa la rappresentazione stringa del risultato completo,
+            # che gestisce correttamente i casi in cui l'output è nullo.
+            # Invece di `res.output`, usiamo `str(res)`.
+            self.update_memory("tool", str(res), tool_call_id=res.tool_call_id, name=res.name)
 
         return sum(results, ToolResult())
     # --- FINE BLOCCO MODIFICATO ---
 
-
-    # --- INIZIO BLOCCO MODIFICATO ---
     async def execute_tool_calls(self, tool_calls: List[ToolCall]) -> List[ToolResult]:
         """
         Executes tool calls sequentially, sending 'action' events to the frontend
@@ -128,14 +128,11 @@ class Manus(ToolCallAgent):
 
             result = await self.available_tools.execute(name=tool_name, tool_input=tool_args_dict)
 
-            # CORREZIONE: Assegniamo sia l'ID che il NOME al risultato
             result.tool_call_id = tool_call.id
             result.name = tool_name
             results.append(result)
 
         return results
-    # --- FINE BLOCCO MODIFICATO ---
-
 
     @classmethod
     async def create(cls, **kwargs) -> "Manus":

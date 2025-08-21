@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import sys  # <-- Aggiunto import mancante
 from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
@@ -14,6 +15,14 @@ import uvicorn
 from app.agent.manus import Manus
 from app.logger import logger, define_log_level
 from app.config import WORKSPACE_ROOT
+
+# --- INIZIO BLOCCO DI CORREZIONE PER WINDOWS ---
+# Risolve un problema di compatibilità di asyncio/Playwright su Windows.
+# Va inserito prima di qualsiasi logica asincrona.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+# --- FINE BLOCCO DI CORREZIONE ---
+
 
 # --- 1. Setup dell'Applicazione FastAPI ---
 app = FastAPI()

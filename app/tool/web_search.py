@@ -138,14 +138,12 @@ class WebSearch(BaseTool):
         country: Optional[str] = None,
         fetch_content: bool = False,
     ) -> SearchResponse:
-        # --- INIZIO MODIFICA 1: Invia l'evento 'action' al frontend ---
         if self.callback_handler:
             await self.callback_handler(
                 "action",
                 title="🌐 Ricerca Web",
                 content=query
             )
-        # --- FINE MODIFICA 1 ---
 
         retry_delay = getattr(config.search_config, "retry_delay", 60) if config.search_config else 60
         max_retries = getattr(config.search_config, "max_retries", 3) if config.search_config else 3
@@ -160,14 +158,12 @@ class WebSearch(BaseTool):
                 if fetch_content:
                     results = await self._fetch_content_for_results(results)
 
-                # --- INIZIO MODIFICA 2: Invia un riassunto strutturato al frontend ---
                 if self.callback_handler:
                     summary_message = f"Ho trovato i seguenti risultati per '{query}':\n\n"
                     for i, res in enumerate(results[:3], 1):
                         summary_message += f"{i}. **{res.title}**\n   - {res.url}\n"
 
                     await self.callback_handler("summary", content=summary_message.strip())
-                # --- FINE MODIFICA 2 ---
 
                 return SearchResponse(
                     query=query,
@@ -193,6 +189,7 @@ class WebSearch(BaseTool):
 
         return SearchResponse(query=query, error=error_message, results=[])
 
+    # --- INIZIO BLOCCO MODIFICATO ---
     async def _try_all_engines(
         self, query: str, num_results: int, search_params: Dict[str, Any]
     ) -> List[SearchResult]:
@@ -204,18 +201,26 @@ class WebSearch(BaseTool):
                 engine, query, num_results, search_params
             )
             if search_items:
-                return [
-                    SearchResult(
-                        position=i + 1,
-                        url=item.url,
-                        title=item.title or f"Result {i+1}",
-                        description=item.description or "",
-                        source=engine_name,
-                    )
-                    for i, item in enumerate(search_items)
-                ]
-        logger.error(f"All search engines failed.")
+                valid_items = []
+                for item in search_items:
+                    # CORREZIONE: Controlla che l'URL sia una stringa e che inizi con http/https
+                    if isinstance(item.url, str) and item.url.startswith(('http://', 'https://')):
+                        valid_items.append(
+                            SearchResult(
+                                position=len(valid_items) + 1,
+                                url=item.url,
+                                title=item.title or f"Result {len(valid_items) + 1}",
+                                description=item.description or "",
+                                source=engine_name,
+                            )
+                        )
+
+                if valid_items:
+                    return valid_items
+
+        logger.error(f"All search engines failed to return valid results.")
         return []
+    # --- FINE BLOCCO MODIFICATO ---
 
     async def _fetch_content_for_results(
         self, results: List[SearchResult]

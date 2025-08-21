@@ -1,5 +1,3 @@
-# app/tool/base.py
-
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Callable, Awaitable
 
@@ -45,7 +43,7 @@ class ToolResult(BaseModel):
     base64_image: Optional[str] = Field(default=None)
     system: Optional[str] = Field(default=None)
     tool_call_id: Optional[str] = Field(default=None)
-    name: Optional[str] = Field(default=None) # <-- RIGA AGGIUNTA QUI
+    name: Optional[str] = Field(default=None)
 
     class Config:
         arbitrary_types_allowed = True
@@ -71,7 +69,15 @@ class ToolResult(BaseModel):
         )
 
     def __str__(self):
-        return f"Error: {self.error}" if self.error else self.output
+        """
+        CORREZIONE: Assicura che venga sempre restituita una stringa.
+        Restituisce una stringa vuota se sia l'output che l'errore sono assenti.
+        """
+        if self.error:
+            return f"Error: {self.error}"
+        if self.output is not None:
+            return str(self.output)
+        return ""  # Restituisce una stringa vuota di default
 
     def replace(self, **kwargs):
         """Returns a new ToolResult with the given fields replaced."""
