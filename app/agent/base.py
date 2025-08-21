@@ -111,13 +111,12 @@ class BaseAgent(BaseModel, ABC):
         if self.state not in [AgentState.IDLE, AgentState.AWAITING_USER_INPUT]:
             raise RuntimeError(f"Cannot run agent from state: {self.state}")
 
-        # Assegna lo scratchpad all'agente per questa esecuzione
         self.scratchpad = scratchpad
 
         if request:
             self.update_memory("user", request)
 
-        results: List[str] = []
+        final_answers: List[str] = []
         async with self.state_context(AgentState.RUNNING):
             while (
                 self.current_step < self.max_steps and self.state != AgentState.FINISHED
@@ -125,34 +124,38 @@ class BaseAgent(BaseModel, ABC):
                 self.current_step += 1
                 logger.info(f"Executing step {self.current_step}/{self.max_steps}")
 
-                # --- INIZIO MODIFICA: Invia un messaggio di "pensiero" al frontend ---
-                # Prima di eseguire un passo, l'agente può comunicare cosa sta per fare.
                 if self.callback_handler:
                     await self.callback_handler("thought", f"Inizio lo step {self.current_step}: sto decidendo la prossima azione...")
-                # --- FINE MODIFICA ---
 
                 step_result = await self.step()
+
+                # --- INIZIO BLOCCO MODIFICATO ---
+                # Dobbiamo gestire correttamente l'oggetto ToolResult restituito dal passo.
+                # Se c'è un output, lo aggiungiamo alla nostra lista di risultati.
+                if step_result and step_result.output:
+                    final_answers.append(str(step_result.output))
+                # --- FINE BLOCCO MODIFICATO ---
 
                 if hasattr(step_result, "system") and step_result.system == "AWAITING_USER_INPUT":
                     self.state = AgentState.AWAITING_USER_INPUT
                     logger.info("Agent is now awaiting user input.")
-                    results.append(step_result.output)
+                    if step_result.output:
+                         final_answers.append(step_result.output)
                     break
 
                 if self.is_stuck():
                     self.handle_stuck_state()
 
-                results.append(f"Step {self.current_step}: {str(step_result)}")
-
             if self.current_step >= self.max_steps:
                 self.current_step = 0
                 self.state = AgentState.IDLE
-                results.append(f"Terminated: Reached max steps ({self.max_steps})")
+                final_answers.append(f"Terminato: Raggiunto il numero massimo di passi ({self.max_steps})")
 
         if self.state != AgentState.AWAITING_USER_INPUT:
             await SANDBOX_CLIENT.cleanup()
 
-        return "\n".join(results) if results else "No steps executed"
+        # Restituisce l'ultimo output valido, o un messaggio di completamento se non è stato generato un output specifico.
+        return final_answers[-1] if final_answers else "Compito completato."
 
     @abstractmethod
     async def step(self) -> Any:
