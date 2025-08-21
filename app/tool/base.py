@@ -1,9 +1,7 @@
 # app/tool/base.py
 
 from abc import ABC, abstractmethod
-# --- INIZIO MODIFICA: Aggiunta import per il type hinting del callback ---
 from typing import Any, Dict, Optional, Callable, Awaitable
-# --- FINE MODIFICA ---
 
 from pydantic import BaseModel, Field
 
@@ -12,18 +10,10 @@ class BaseTool(ABC, BaseModel):
     name: str
     description: str
     parameters: Optional[dict] = None
-
-    # --- INIZIO MODIFICA: Aggiunta del callback_handler ---
-    # Questo campo conterrà la funzione per inviare messaggi in tempo reale al frontend.
-    # Viene inizializzato a None e sarà valorizzato dall'agente che utilizza il tool.
     callback_handler: Optional[Callable[[str, Any], Awaitable[None]]] = None
-    # --- FINE MODIFICA ---
-
 
     class Config:
         arbitrary_types_allowed = True
-        # Aggiungiamo 'extra' per permettere al callback_handler di essere
-        # assegnato senza causare errori di validazione Pydantic.
         extra = "allow"
 
     async def __call__(self, **kwargs) -> Any:
@@ -46,6 +36,7 @@ class BaseTool(ABC, BaseModel):
         }
 
 
+# --- INIZIO BLOCCO MODIFICATO ---
 class ToolResult(BaseModel):
     """Represents the result of a tool execution."""
 
@@ -53,6 +44,8 @@ class ToolResult(BaseModel):
     error: Optional[str] = Field(default=None)
     base64_image: Optional[str] = Field(default=None)
     system: Optional[str] = Field(default=None)
+    tool_call_id: Optional[str] = Field(default=None)
+    name: Optional[str] = Field(default=None) # <-- RIGA AGGIUNTA QUI
 
     class Config:
         arbitrary_types_allowed = True
@@ -83,6 +76,7 @@ class ToolResult(BaseModel):
     def replace(self, **kwargs):
         """Returns a new ToolResult with the given fields replaced."""
         return type(self)(**{**self.dict(), **kwargs})
+# --- FINE BLOCCO MODIFICATO ---
 
 
 class CLIResult(ToolResult):
@@ -91,5 +85,7 @@ class CLIResult(ToolResult):
 
 class ToolFailure(ToolResult):
     """A ToolResult that represents a failure."""
+
+
 
 

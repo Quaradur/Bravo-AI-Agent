@@ -65,7 +65,7 @@ class ToolCallAgent(ReActAgent):
             # If reasoning fails, we can't proceed.
             self.state = AgentState.ERROR
             return False
-        
+
         logger.info(f"✨ {self.name}'s thoughts: {reasoning_text}")
 
         # Create an assistant message that holds the reasoning.

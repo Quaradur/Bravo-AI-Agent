@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Header from "@/components/header"
+import Section1 from "@/components/section-1"
 import BravoAIInterface from "@/components/bravo-ai-interface"
 import LoginInterface from "@/components/login-interface"
 
@@ -36,6 +37,7 @@ export default function HomePage() {
     <div className="min-h-screen bg-background">
       <Header onPricingClick={handlePricingClick} onGetStartedClick={handleGetStartedClick} />
       <main className="container mx-auto px-4 py-8">
+        <Section1 />
         <div className="text-center">
           <h1 className="text-4xl font-bold text-foreground mb-4">Welcome to Bravo Web App</h1>
           <p className="text-muted-foreground text-lg">Your application is ready with the new header navbar.</p>

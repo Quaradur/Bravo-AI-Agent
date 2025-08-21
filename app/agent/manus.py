@@ -1,4 +1,5 @@
 import os
+import json
 from typing import Dict, List, Optional
 
 from pydantic import Field, model_validator
@@ -13,9 +14,7 @@ from app.tool.mcp import MCPClients, MCPClientTool
 from app.tool.idle import IdleTool
 from app.utils.tool_loader import load_tools_from_directory
 from app.tool.base import ToolResult
-# --- INIZIO MODIFICA: Importiamo ToolCall dallo schema ---
 from app.schema import ToolCall
-# --- FINE MODIFICA ---
 
 
 TOOL_DIR = PROJECT_ROOT / "app" / "tool"
@@ -58,6 +57,7 @@ class Manus(ToolCallAgent):
 
         return self
 
+    # --- INIZIO BLOCCO MODIFICATO ---
     async def step(self) -> ToolResult:
         """
         Executes one step of the agent's thinking and action loop,
@@ -80,11 +80,14 @@ class Manus(ToolCallAgent):
         results = await self.execute_tool_calls(tool_calls)
 
         for res in results:
-            self.update_memory("tool", res.output, tool_call_id=res.tool_call_id)
+            # CORREZIONE: Aggiungiamo 'name=res.name' alla chiamata
+            self.update_memory("tool", res.output, tool_call_id=res.tool_call_id, name=res.name)
 
         return sum(results, ToolResult())
+    # --- FINE BLOCCO MODIFICATO ---
 
-    # --- INIZIO MODIFICA: Override di execute_tool_calls per inviare eventi 'action' ---
+
+    # --- INIZIO BLOCCO MODIFICATO ---
     async def execute_tool_calls(self, tool_calls: List[ToolCall]) -> List[ToolResult]:
         """
         Executes tool calls sequentially, sending 'action' events to the frontend
@@ -96,10 +99,13 @@ class Manus(ToolCallAgent):
 
         for tool_call in tool_calls:
             tool_name = tool_call.function.name
-            tool_args = tool_call.function.arguments
+
+            try:
+                tool_args_dict = json.loads(tool_call.function.arguments or '{}')
+            except json.JSONDecodeError:
+                tool_args_dict = {}
 
             if self.callback_handler:
-                # Mappiamo i nomi dei tool a titoli più leggibili con icone
                 title = f"⚙️ Esecuzione: {tool_name}"
                 if "file" in tool_name:
                     title = f"📄 File: {tool_name}"
@@ -112,8 +118,7 @@ class Manus(ToolCallAgent):
                 elif "planning" in tool_name:
                     title = f"📝 Planning: {tool_name}"
 
-                # Formattiamo gli argomenti per una visualizzazione pulita
-                content = ", ".join(f"{k}='{v}'" for k, v in tool_args.items())
+                content = ", ".join(f"{k}='{v}'" for k, v in tool_args_dict.items())
 
                 await self.callback_handler(
                     "action",
@@ -121,13 +126,16 @@ class Manus(ToolCallAgent):
                     content=content
                 )
 
-            # Eseguiamo la singola chiamata al tool usando la logica della classe padre
-            # (assumendo che esista un metodo per l'esecuzione singola)
-            result = await super().execute_tool_call(tool_call)
+            result = await self.available_tools.execute(name=tool_name, tool_input=tool_args_dict)
+
+            # CORREZIONE: Assegniamo sia l'ID che il NOME al risultato
+            result.tool_call_id = tool_call.id
+            result.name = tool_name
             results.append(result)
 
         return results
-    # --- FINE MODIFICA ---
+    # --- FINE BLOCCO MODIFICATO ---
+
 
     @classmethod
     async def create(cls, **kwargs) -> "Manus":
@@ -207,5 +215,7 @@ class Manus(ToolCallAgent):
         result = await super().think()
         self.next_step_prompt = original_prompt
         return result
+
+
 
 
